@@ -134,7 +134,7 @@ class Program
     {
         while (true)
         {
-            int o = Opcion("EQUIPOS", "Registrar", "Consultar");
+            int o = Opcion("EQUIPOS", "Registrar", "Consultar", "Buscar por numero de serie");
             if (o == 0) return;
             if (o == 1)
             {
@@ -154,6 +154,18 @@ class Program
             }
             else if (o == 2) foreach (var e in db.Equipos)
                 Console.WriteLine($"{e.Codigo} | {e.Tipo} | {e.Marca} {e.Modelo} | Serie: {e.Serie} | Propietario: {e.ClienteCodigo} | Revision Q{e.CostoRevision():F2}");
+            else if (o == 3)
+            {
+                string serie = Texto("Numero de serie: ");
+                bool encontrado = false;
+                foreach (var e in db.Equipos)
+                    if (e.Serie.Equals(serie, StringComparison.OrdinalIgnoreCase))
+                    {
+                        Console.WriteLine($"{e.Codigo} | {e.Tipo} | {e.Marca} {e.Modelo} | Propietario: {e.ClienteCodigo} | Estado: {e.EstadoFisico} | Accesorios: {e.Accesorios}");
+                        encontrado = true;
+                    }
+                if (!encontrado) Console.WriteLine("No se encontro un equipo con ese numero de serie.");
+            }
         }
     }
     static void MenuRepuestos()
@@ -199,7 +211,7 @@ class Program
     {
         while (true)
         {
-            int o = Opcion("SOLICITUDES", "Crear", "Consultar", "Registrar diagnostico", "Agregar repuesto", "Cambiar estado", "Ver historial", "Deshacer cambio", "Calificar servicio");
+            int o = Opcion("SOLICITUDES", "Crear", "Consultar", "Registrar diagnostico", "Agregar repuesto", "Cambiar estado", "Ver historial", "Deshacer cambio", "Calificar servicio", "Consultar por codigo");
             if (o == 0) return;
             if (o == 1) CrearSolicitud();
             else if (o == 2)
@@ -262,6 +274,11 @@ class Program
                 if (nota > 5) { Console.WriteLine("Fuera de rango."); continue; }
                 t.SumaCalificaciones += nota; t.NumeroCalificaciones++; db.Calificaciones[nota - 1]++;
                 s.Calificacion = nota;
+            }
+            else if (o == 9)
+            {
+                var s = PedirSolicitud();
+                if (s != null) Mostrar(s);
             }
         }
     }
@@ -342,7 +359,7 @@ class Program
             "Asignada" => "En diagnostico",
             "En diagnostico" when s.Diagnostico != "" => "En reparacion",
             "En reparacion" => "Lista para entregar",
-            "Lista para entregar" => "Entregada",
+            "Lista para entregar" when s.Diagnostico != "" => "Entregada",
             _ => null
         };
         Console.WriteLine("Estado actual: " + s.Estado);
