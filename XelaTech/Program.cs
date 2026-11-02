@@ -332,7 +332,6 @@ class Program
         Tecnico? recomendado = null;
         foreach (var t in db.Tecnicos)
             if (t.Disponible && t.Especialidad == equipo.Tipo && t.TrabajosActivos < Datos.LimiteTrabajos)
-            {
                 Console.WriteLine($"{t.Codigo} | {t.Nombre} | {t.TrabajosActivos} trabajos");
                 if (recomendado == null || t.TrabajosActivos < recomendado.TrabajosActivos)
                     recomendado = t;
