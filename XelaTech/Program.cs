@@ -40,8 +40,20 @@ class Program
         while (string.IsNullOrWhiteSpace(entrada));
         return entrada;
     }
+    static bool primeraPantalla = true;
+    static void PrepararPantalla()
+    {
+        if (!primeraPantalla)
+        {
+            Console.WriteLine("\nPresiona cualquier tecla para continuar...");
+            Console.ReadKey(true);
+        }
+        primeraPantalla = false;
+        Console.Clear();
+    }
     static int Opcion(string titulo, params string[] opciones)
     {
+        PrepararPantalla();
         Console.WriteLine($"\n=== {titulo} ===");
         for (int i = 0; i < opciones.Length; i++) Console.WriteLine($"{i + 1}. {opciones[i]}");
         Console.WriteLine("0. Volver / salir");
