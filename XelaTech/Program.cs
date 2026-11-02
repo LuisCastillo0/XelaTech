@@ -462,7 +462,7 @@ class Program
     }
     static void MenuReportes()
     {
-        int o = Opcion("REPORTES", "Colas por prioridad", "Solicitudes por estado", "Tecnicos disponibles/llenos", "Tecnico con mas finalizados", "Equipos por tipo", "Solicitudes por costo", "Solicitudes por fecha", "Repuestos por existencia", "Repuestos bajos", "Ingresos por entregados", "Calificaciones", "Matriz semanal", "Clientes con solicitudes activas");
+        int o = Opcion("REPORTES", "Colas por prioridad", "Solicitudes por estado", "Tecnicos disponibles/llenos", "Tecnico con mas finalizados", "Equipos por tipo", "Solicitudes por costo", "Solicitudes por fecha", "Repuestos por existencia", "Repuestos bajos", "Ingresos por entregados", "Calificaciones", "Matriz semanal", "Clientes con solicitudes activas", "Solicitudes por tecnico");
         if (o == 0) return;
         if (o == 1)
         {
@@ -524,6 +524,27 @@ class Program
                 }
             }
             if (encontrados == 0) Console.WriteLine("No hay clientes con solicitudes activas.");
+        }
+        else if (o == 14)
+        {
+            int codigo = Entero("Codigo del tecnico: ", 1);
+            var tecnico = db.Tecnico(codigo);
+            if (tecnico == null) { Console.WriteLine("Tecnico inexistente."); return; }
+            Console.WriteLine($"Solicitudes asignadas a {tecnico.Nombre}:");
+            int activas = 0;
+            int entregadas = 0;
+            int canceladas = 0;
+            foreach (var solicitud in db.Solicitudes)
+            {
+                if (solicitud.TecnicoCodigo != codigo) continue;
+                Mostrar(solicitud);
+                if (solicitud.Estado == "Entregada") entregadas++;
+                else if (solicitud.Estado == "Cancelada") canceladas++;
+                else activas++;
+            }
+            Console.WriteLine($"Activas: {activas} | Entregadas: {entregadas} | Canceladas: {canceladas}");
+            if (activas + entregadas + canceladas == 0)
+                Console.WriteLine("El tecnico aun no tiene solicitudes asignadas.");
         }
     }
     static void MostrarMatriz()
