@@ -1,4 +1,4 @@
-﻿using XelaTech.Modelos;
+using XelaTech.Modelos;
 using XelaTech.Servicios;
 
 class Program
@@ -12,6 +12,16 @@ class Program
             Console.Write(mensaje);
             if (int.TryParse(Console.ReadLine(), out int n) && n >= minimo) return n;
             Console.WriteLine($"Ingrese un numero entero mayor o igual a {minimo}.");
+        }
+    }
+    static string Correo(string mensaje)
+    {
+        while (true)
+        {
+            string correo = Texto(mensaje);
+            int arroba = correo.IndexOf('@');
+            if (arroba > 0 && arroba < correo.Length - 3 && correo.IndexOf('.', arroba) > arroba + 1) return correo;
+            Console.WriteLine("Correo no valido.");
         }
     }
     static decimal Dinero(string mensaje)
@@ -76,7 +86,7 @@ class Program
             {
                 int id = Entero("Codigo: ", 1);
                 if (db.Cliente(id) != null) { Console.WriteLine("Codigo duplicado."); continue; }
-                db.Clientes.Add(new Entidades { Codigo = id, Nombre = Texto("Nombre: "), Telefono = Texto("Telefono: "), Correo = Texto("Correo: "), Tipo = Texto("Tipo: ") });
+                db.Clientes.Add(new Cliente { Codigo = id, Nombre = Texto("Nombre: "), Telefono = Texto("Telefono: "), Correo = Correo("Correo: "), Tipo = Texto("Tipo: ") });
                 Console.WriteLine("Cliente registrado.");
             }
             else if (o == 2) foreach (var c in db.Clientes) Console.WriteLine($"{c.Codigo} | {c.Nombre} | {c.Telefono} | {c.Correo} | {c.Tipo} | Solicitudes: {c.CantidadSolicitudes}");
@@ -84,7 +94,7 @@ class Program
             {
                 var c = db.Cliente(Entero("Codigo: ", 1));
                 if (c == null) { Console.WriteLine("No existe."); continue; }
-                c.Nombre = Texto("Nuevo nombre: "); c.Telefono = Texto("Nuevo telefono: "); c.Correo = Texto("Nuevo correo: "); c.Tipo = Texto("Nuevo tipo: ");
+                c.Nombre = Texto("Nuevo nombre: "); c.Telefono = Texto("Nuevo telefono: "); c.Correo = Correo("Nuevo correo: "); c.Tipo = Texto("Nuevo tipo: ");
                 Console.WriteLine("Actualizado.");
             }
         }
@@ -210,6 +220,9 @@ class Program
                 var s = PedirSolicitud(); if (s == null) continue;
                 if (!db.Activa(s) || s.Historial.Count == 0 || s.Estado == "Asignada" || s.Estado == "En espera")
                 { Console.WriteLine("No se puede deshacer en este estado."); continue; }
+                string anterior = s.Historial.Peek();
+                if (s.Estado == "En reparacion" && anterior == "En diagnostico" && s.RepuestosUsados.Count > 0)
+                { Console.WriteLine("No se puede regresar al diagnostico despues de consumir repuestos."); continue; }
                 s.Estado = s.Historial.Pop(); Console.WriteLine("Restaurado a: " + s.Estado);
             }
             else if (o == 8)
@@ -217,11 +230,11 @@ class Program
                 var s = PedirSolicitud(); if (s == null) continue;
                 if (s.Estado != "Entregada" || s.TecnicoCodigo == null) { Console.WriteLine("Solo puede calificar servicios entregados."); continue; }
                 var t = db.Tecnico(s.TecnicoCodigo.Value)!;
-                if (s.RepuestosUsados.Contains("CALIFICADO")) { Console.WriteLine("Ya fue calificado."); continue; }
+                if (s.Calificacion != null) { Console.WriteLine("Ya fue calificado."); continue; }
                 int nota = Entero("Calificacion de 1 a 5: ", 1);
                 if (nota > 5) { Console.WriteLine("Fuera de rango."); continue; }
                 t.SumaCalificaciones += nota; t.NumeroCalificaciones++; db.Calificaciones[nota - 1]++;
-                s.RepuestosUsados.Add("CALIFICADO");
+                s.Calificacion = nota;
             }
         }
     }
@@ -254,6 +267,7 @@ class Program
     {
         Console.WriteLine($"{s.Codigo} | Cliente {s.ClienteCodigo} | Equipo {s.EquipoCodigo} | {(s.Urgente ? "URGENTE" : "NORMAL")} | {s.Estado} | Tecnico {s.TecnicoCodigo?.ToString() ?? "Sin asignar"} | {s.Fecha:g} | Total Q{s.Total:F2}");
         if (s.Diagnostico != "") Console.WriteLine("  Diagnostico: " + s.Diagnostico);
+        if (s.Calificacion != null) Console.WriteLine("  Calificacion: " + s.Calificacion);
     }
     static void Actualizar(Solicitud s, string nuevo)
     {
@@ -261,6 +275,7 @@ class Program
     }
     static void AtenderColas()
     {
+
         Queue<int>? cola = db.Urgentes.Count > 0 ? db.Urgentes : db.Normales.Count > 0 ? db.Normales : null;
         if (cola == null) { Console.WriteLine("No hay solicitudes pendientes."); return; }
         var s = db.Solicitud(cola.Peek())!;
@@ -275,7 +290,7 @@ class Program
         var tecnico = db.Tecnico(id);
         if (tecnico == null || tecnico.Especialidad != equipo.Tipo || tecnico.TrabajosActivos >= Datos.LimiteTrabajos)
         { Console.WriteLine("Tecnico no disponible o especialidad incorrecta."); return; }
-        cola.Dequeue(); s.TecnicoCodigo = id; tecnico.TrabajosActivos++;
+        cola.Dequeue(); s.TecnicoCodigo = id; s.FechaAsignacion = DateTime.Now; tecnico.TrabajosActivos++;
         Actualizar(s, "Asignada"); Console.WriteLine("Solicitud asignada.");
     }
     static void CambiarEstado(Solicitud s)
@@ -298,6 +313,7 @@ class Program
             if (s.Estado != "En espera" && s.Estado != "Asignada" && s.Estado != "En diagnostico")
             { Console.WriteLine("No puede cancelar en este punto."); return; }
             if (s.TecnicoCodigo != null) db.Tecnico(s.TecnicoCodigo.Value)!.TrabajosActivos--;
+
             QuitarDeCola(db.Urgentes, s.Codigo); QuitarDeCola(db.Normales, s.Codigo);
             Actualizar(s, "Cancelada");
         }
@@ -397,7 +413,7 @@ class Program
     {
         int[,] matriz = db.MatrizSemanal();
         Console.WriteLine("Tecnico | Lun Mar Mie Jue Vie Sab Dom");
-        int max = -1, tecnicoMax = -1, diaMax = -1;
+        int max = 0, tecnicoMax = -1, diaMax = -1;
         for (int i = 0; i < db.Tecnicos.Count; i++)
         {
             Console.Write($"{db.Tecnicos[i].Nombre} | ");
@@ -408,7 +424,7 @@ class Program
             }
             Console.WriteLine();
         }
-        if (max >= 0) Console.WriteLine($"Mayor carga: {db.Tecnicos[tecnicoMax].Nombre}, dia {new[] { "Lunes", "Martes", "Miercoles", "Jueves", "Viernes", "Sabado", "Domingo" }[diaMax]}, {max} asignaciones.");
+        if (tecnicoMax >= 0) Console.WriteLine($"Mayor carga: {db.Tecnicos[tecnicoMax].Nombre}, dia {new[] { "Lunes", "Martes", "Miercoles", "Jueves", "Viernes", "Sabado", "Domingo" }[diaMax]}, {max} asignaciones.");
     }
     static int Siguiente<T>(List<T> lista, Func<T, int> codigo)
     {
@@ -422,7 +438,7 @@ class Program
         for (int i = 0; i < cuantos; i++)
         {
             int c = Siguiente(db.Clientes, x => x.Codigo);
-            db.Clientes.Add(new Entidades { Codigo = c, Nombre = "Cliente prueba " + c, Telefono = "55550000", Correo = $"cliente{c}@ejemplo.com", Tipo = "Particular" });
+            db.Clientes.Add(new Cliente { Codigo = c, Nombre = "Cliente prueba " + c, Telefono = "55550000", Correo = $"cliente{c}@ejemplo.com", Tipo = "Particular" });
             int t = Siguiente(db.Tecnicos, x => x.Codigo);
             string especialidad = new[] { "Portatil", "Escritorio", "Impresora" }[i % 3];
             db.Tecnicos.Add(new Tecnico { Codigo = t, Nombre = "Tecnico prueba " + t, Especialidad = especialidad });
