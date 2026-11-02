@@ -134,7 +134,7 @@ class Program
     {
         while (true)
         {
-            int o = Opcion("EQUIPOS", "Registrar", "Consultar", "Buscar por numero de serie");
+            int o = Opcion("EQUIPOS", "Registrar", "Consultar", "Buscar por numero de serie", "Historial de servicios por equipo");
             if (o == 0) return;
             if (o == 1)
             {
@@ -165,6 +165,22 @@ class Program
                         encontrado = true;
                     }
                 if (!encontrado) Console.WriteLine("No se encontro un equipo con ese numero de serie.");
+            }
+            else if (o == 4)
+            {
+                int codigo = Entero("Codigo del equipo: ", 1);
+                var equipo = db.Equipo(codigo);
+                if (equipo == null) { Console.WriteLine("Equipo inexistente."); continue; }
+                Console.WriteLine($"Historial de {equipo.Tipo} | {equipo.Marca} {equipo.Modelo} | Serie: {equipo.Serie}");
+                int cantidad = 0;
+                foreach (var solicitud in db.Solicitudes)
+                    if (solicitud.EquipoCodigo == codigo)
+                    {
+                        Mostrar(solicitud);
+                        cantidad++;
+                    }
+                if (cantidad == 0) Console.WriteLine("Este equipo aun no tiene servicios registrados.");
+                else Console.WriteLine($"Servicios encontrados: {cantidad}");
             }
         }
     }
