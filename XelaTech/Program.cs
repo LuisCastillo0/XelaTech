@@ -80,7 +80,7 @@ class Program
     {
         while (true)
         {
-            int o = Opcion("CLIENTES", "Registrar", "Consultar todos", "Actualizar");
+            int o = Opcion("CLIENTES", "Registrar", "Consultar todos", "Actualizar", "Ver solicitudes de un cliente");
             if (o == 0) return;
             if (o == 1)
             {
@@ -96,6 +96,22 @@ class Program
                 if (c == null) { Console.WriteLine("No existe."); continue; }
                 c.Nombre = Texto("Nuevo nombre: "); c.Telefono = Texto("Nuevo telefono: "); c.Correo = Correo("Nuevo correo: "); c.Tipo = Texto("Nuevo tipo: ");
                 Console.WriteLine("Actualizado.");
+            }
+            else if (o == 4)
+            {
+                int codigo = Entero("Codigo del cliente: ", 1);
+                var cliente = db.Cliente(codigo);
+                if (cliente == null) { Console.WriteLine("Cliente inexistente."); continue; }
+                Console.WriteLine($"Solicitudes de {cliente.Nombre}:");
+                int cantidad = 0;
+                foreach (var solicitud in db.Solicitudes)
+                    if (solicitud.ClienteCodigo == codigo)
+                    {
+                        Mostrar(solicitud);
+                        cantidad++;
+                    }
+                if (cantidad == 0) Console.WriteLine("El cliente aun no tiene solicitudes registradas.");
+                else Console.WriteLine($"Total de solicitudes: {cantidad}");
             }
         }
     }
