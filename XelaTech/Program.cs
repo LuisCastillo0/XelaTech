@@ -309,6 +309,8 @@ class Program
                     }
                     s.TecnicoCodigo = null;
                     s.FechaAsignacion = null;
+                    QuitarDeCola(db.Urgentes, s.Codigo);
+                    QuitarDeCola(db.Normales, s.Codigo);
                     if (s.Urgente) db.Urgentes.Enqueue(s.Codigo);
                     else db.Normales.Enqueue(s.Codigo);
                 }
@@ -323,6 +325,8 @@ class Program
                 if (s.Calificacion != null) { Console.WriteLine("Ya fue calificado."); continue; }
                 int nota = Entero("Calificacion de 1 a 5: ", 1);
                 if (nota > 5) { Console.WriteLine("Fuera de rango."); continue; }
+                if (t.SumaCalificaciones > int.MaxValue - nota || t.NumeroCalificaciones == int.MaxValue || db.Calificaciones[nota - 1] == int.MaxValue)
+                { Console.WriteLine("No es posible guardar mas calificaciones."); continue; }
                 t.SumaCalificaciones += nota; t.NumeroCalificaciones++; db.Calificaciones[nota - 1]++;
                 s.Calificacion = nota;
             }
@@ -373,11 +377,10 @@ class Program
     }
     static void AtenderColas()
     {
-
+        LimpiarCola(db.Urgentes);
+        LimpiarCola(db.Normales);
         Queue<int>? cola = db.Urgentes.Count > 0 ? db.Urgentes : db.Normales.Count > 0 ? db.Normales : null;
         if (cola == null) { Console.WriteLine("No hay solicitudes pendientes."); return; }
-        while (cola.Count > 0 && db.Solicitud(cola.Peek())?.Estado != "En espera") cola.Dequeue();
-        if (cola.Count == 0) { Console.WriteLine("No hay solicitudes validas en esta cola."); return; }
         var s = db.Solicitud(cola.Peek())!;
         var equipo = db.Equipo(s.EquipoCodigo)!;
         Console.WriteLine($"Siguiente: {s.Codigo}, {equipo.Tipo}, {(s.Urgente ? "URGENTE" : "NORMAL")}");
@@ -403,6 +406,15 @@ class Program
         { Console.WriteLine("Tecnico no disponible o especialidad incorrecta."); return; }
         cola.Dequeue(); s.TecnicoCodigo = id; s.FechaAsignacion = DateTime.Now; tecnico.TrabajosActivos++;
         Actualizar(s, "Asignada"); Console.WriteLine("Solicitud asignada.");
+    }
+    static void LimpiarCola(Queue<int> cola)
+    {
+        int cantidad = cola.Count;
+        for (int i = 0; i < cantidad; i++)
+        {
+            int codigo = cola.Dequeue();
+            if (db.Solicitud(codigo)?.Estado == "En espera") cola.Enqueue(codigo);
+        }
     }
     static void CambiarEstado(Solicitud s)
     {
@@ -492,6 +504,8 @@ class Program
         if (o == 0) return;
         if (o == 1)
         {
+            LimpiarCola(db.Urgentes);
+            LimpiarCola(db.Normales);
             Console.WriteLine("Urgentes:"); foreach (int id in db.Urgentes) Console.WriteLine(id);
             Console.WriteLine("Normales:"); foreach (int id in db.Normales) Console.WriteLine(id);
         }
@@ -507,13 +521,25 @@ class Program
         else if (o == 3) foreach (var t in db.Tecnicos) Console.WriteLine($"{t.Nombre}: {(!t.Disponible ? "No disponible" : t.TrabajosActivos >= Datos.LimiteTrabajos ? "Carga completa" : "Disponible")}");
         else if (o == 4)
         {
+            if (db.Tecnicos.Count < 2) { Console.WriteLine("Se requieren al menos dos tecnicos para ordenar."); return; }
+            Console.WriteLine("Seleccion | Servicios finalizados | Descendente");
             var lista = Algoritmos.SeleccionFinalizados(db.Tecnicos);
-            if (lista.Count > 0) Console.WriteLine($"{lista[0].Nombre}: {lista[0].Finalizados}");
+            Console.WriteLine($"{lista[0].Nombre}: {lista[0].Finalizados}");
         }
         else if (o == 5) foreach (string tipo in new[] { "Portatil", "Escritorio", "Impresora" })
         {
-            int n = 0; foreach (var s in db.Solicitudes) if (db.Equipo(s.EquipoCodigo)?.Tipo == tipo) n++;
-            Console.WriteLine($"{tipo}: {n} solicitudes");
+            int n = 0;
+            foreach (var equipo in db.Equipos)
+            {
+                if (equipo.Tipo != tipo) continue;
+                foreach (var solicitud in db.Solicitudes)
+                    if (solicitud.EquipoCodigo == equipo.Codigo && solicitud.Estado == "Entregada")
+                    {
+                        n++;
+                        break;
+                    }
+            }
+            Console.WriteLine($"{tipo}: {n} equipos atendidos");
         }
         else if (o == 6 || o == 7)
         {
@@ -574,6 +600,8 @@ class Program
         }
         else if (o == 15)
         {
+            LimpiarCola(db.Urgentes);
+            LimpiarCola(db.Normales);
             int activas = 0, entregadas = 0, canceladas = 0;
             int urgentes = 0, normales = 0, repuestosBajos = 0;
             decimal ingresos = 0;
@@ -620,12 +648,19 @@ class Program
     static int Siguiente<T>(List<T> lista, Func<T, int> codigo)
     {
         int mayor = 0; foreach (var item in lista) if (codigo(item) > mayor) mayor = codigo(item);
+        if (mayor == int.MaxValue) throw new InvalidOperationException("No quedan codigos disponibles.");
         return mayor + 1;
     }
     static void GenerarPruebas()
     {
         int cuantos = Entero("Cantidad de juegos de prueba (1 a 20): ", 1);
         if (cuantos > 20) { Console.WriteLine("Maximo 20."); return; }
+        if (db.Clientes.Exists(x => x.Codigo > int.MaxValue - cuantos) ||
+            db.Tecnicos.Exists(x => x.Codigo > int.MaxValue - cuantos) ||
+            db.Equipos.Exists(x => x.Codigo > int.MaxValue - cuantos) ||
+            db.Repuestos.Exists(x => x.Codigo > int.MaxValue - cuantos) ||
+            db.Solicitudes.Exists(x => x.Codigo > int.MaxValue - cuantos))
+        { Console.WriteLine("No hay suficientes codigos disponibles."); return; }
         for (int i = 0; i < cuantos; i++)
         {
             int c = Siguiente(db.Clientes, x => x.Codigo);
