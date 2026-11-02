@@ -103,7 +103,7 @@ class Program
     {
         while (true)
         {
-            int o = Opcion("TECNICOS", "Registrar", "Consultar");
+            int o = Opcion("TECNICOS", "Registrar", "Consultar", "Cambiar disponibilidad");
             if (o == 0) return;
             if (o == 1)
             {
@@ -112,7 +112,14 @@ class Program
                 db.Tecnicos.Add(new Tecnico { Codigo = id, Nombre = Texto("Nombre: "), Especialidad = Especialidad() });
             }
             else if (o == 2) foreach (var t in db.Tecnicos)
-                Console.WriteLine($"{t.Codigo} | {t.Nombre} | {t.Especialidad} | Activos: {t.TrabajosActivos}/{Datos.LimiteTrabajos} | Finalizados: {t.Finalizados} | Promedio: {t.Promedio:F1}");
+                Console.WriteLine($"{t.Codigo} | {t.Nombre} | {t.Especialidad} | {(t.Disponible ? "Disponible" : "No disponible")} | Activos: {t.TrabajosActivos}/{Datos.LimiteTrabajos} | Finalizados: {t.Finalizados} | Promedio: {t.Promedio:F1}");
+            else if (o == 3)
+            {
+                var t = db.Tecnico(Entero("Codigo del tecnico: ", 1));
+                if (t == null) { Console.WriteLine("Tecnico inexistente."); continue; }
+                t.Disponible = !t.Disponible;
+                Console.WriteLine(t.Disponible ? "Tecnico habilitado." : "Tecnico marcado como no disponible.");
+            }
         }
     }
     static string Especialidad()
@@ -183,7 +190,15 @@ class Program
             int o = Opcion("SOLICITUDES", "Crear", "Consultar", "Registrar diagnostico", "Agregar repuesto", "Cambiar estado", "Ver historial", "Deshacer cambio", "Calificar servicio");
             if (o == 0) return;
             if (o == 1) CrearSolicitud();
-            else if (o == 2) foreach (var s in db.Solicitudes) Mostrar(s);
+            else if (o == 2)
+            {
+                Console.WriteLine("ACTIVAS");
+                foreach (var s in db.Solicitudes) if (db.Activa(s)) Mostrar(s);
+                Console.WriteLine("FINALIZADAS");
+                foreach (var s in db.Solicitudes) if (s.Estado == "Entregada") Mostrar(s);
+                Console.WriteLine("CANCELADAS");
+                foreach (var s in db.Solicitudes) if (s.Estado == "Cancelada") Mostrar(s);
+            }
             else if (o == 3)
             {
                 var s = PedirSolicitud(); if (s == null) continue;
@@ -268,6 +283,9 @@ class Program
         Console.WriteLine($"{s.Codigo} | Cliente {s.ClienteCodigo} | Equipo {s.EquipoCodigo} | {(s.Urgente ? "URGENTE" : "NORMAL")} | {s.Estado} | Tecnico {s.TecnicoCodigo?.ToString() ?? "Sin asignar"} | {s.Fecha:g} | Total Q{s.Total:F2}");
         if (s.Diagnostico != "") Console.WriteLine("  Diagnostico: " + s.Diagnostico);
         if (s.Calificacion != null) Console.WriteLine("  Calificacion: " + s.Calificacion);
+        if (s.TiempoEstimado > 0) Console.WriteLine($"  Tiempo estimado: {s.TiempoEstimado} horas");
+        foreach (string repuesto in s.RepuestosUsados) Console.WriteLine("  Repuesto: " + repuesto);
+        Console.WriteLine($"  Mano de obra: Q{s.ManoObra:F2} | Repuestos: Q{s.CostoRepuestos:F2} | Total: Q{s.Total:F2}");
     }
     static void Actualizar(Solicitud s, string nuevo)
     {
@@ -283,12 +301,12 @@ class Program
         Console.WriteLine($"Siguiente: {s.Codigo}, {equipo.Tipo}, {(s.Urgente ? "URGENTE" : "NORMAL")}");
         Console.WriteLine("Tecnicos compatibles con capacidad:");
         foreach (var t in db.Tecnicos)
-            if (t.Especialidad == equipo.Tipo && t.TrabajosActivos < Datos.LimiteTrabajos)
+            if (t.Disponible && t.Especialidad == equipo.Tipo && t.TrabajosActivos < Datos.LimiteTrabajos)
                 Console.WriteLine($"{t.Codigo} | {t.Nombre} | {t.TrabajosActivos} trabajos");
         int id = Entero("Codigo del tecnico (0 para cancelar): ");
         if (id == 0) return;
         var tecnico = db.Tecnico(id);
-        if (tecnico == null || tecnico.Especialidad != equipo.Tipo || tecnico.TrabajosActivos >= Datos.LimiteTrabajos)
+        if (tecnico == null || !tecnico.Disponible || tecnico.Especialidad != equipo.Tipo || tecnico.TrabajosActivos >= Datos.LimiteTrabajos)
         { Console.WriteLine("Tecnico no disponible o especialidad incorrecta."); return; }
         cola.Dequeue(); s.TecnicoCodigo = id; s.FechaAsignacion = DateTime.Now; tecnico.TrabajosActivos++;
         Actualizar(s, "Asignada"); Console.WriteLine("Solicitud asignada.");
@@ -372,14 +390,23 @@ class Program
     }
     static void MenuReportes()
     {
-        int o = Opcion("REPORTES", "Colas por prioridad", "Solicitudes por estado", "Tecnicos disponibles/llenos", "Tecnico con mas finalizados", "Equipos por tipo", "Solicitudes por costo", "Solicitudes por fecha", "Repuestos por existencia", "Repuestos bajos", "Ingresos por entregados", "Calificaciones", "Matriz semanal");
+        int o = Opcion("REPORTES", "Colas por prioridad", "Solicitudes por estado", "Tecnicos disponibles/llenos", "Tecnico con mas finalizados", "Equipos por tipo", "Solicitudes por costo", "Solicitudes por fecha", "Repuestos por existencia", "Repuestos bajos", "Ingresos por entregados", "Calificaciones", "Matriz semanal", "Clientes con solicitudes activas");
+        if (o == 0) return;
         if (o == 1)
         {
             Console.WriteLine("Urgentes:"); foreach (int id in db.Urgentes) Console.WriteLine(id);
             Console.WriteLine("Normales:"); foreach (int id in db.Normales) Console.WriteLine(id);
         }
-        else if (o == 2) foreach (var s in db.Solicitudes) Mostrar(s);
-        else if (o == 3) foreach (var t in db.Tecnicos) Console.WriteLine($"{t.Nombre}: {(t.TrabajosActivos >= Datos.LimiteTrabajos ? "Carga completa" : "Disponible")}");
+        else if (o == 2)
+        {
+            Console.WriteLine("ACTIVAS");
+            foreach (var s in db.Solicitudes) if (db.Activa(s)) Mostrar(s);
+            Console.WriteLine("FINALIZADAS");
+            foreach (var s in db.Solicitudes) if (s.Estado == "Entregada") Mostrar(s);
+            Console.WriteLine("CANCELADAS");
+            foreach (var s in db.Solicitudes) if (s.Estado == "Cancelada") Mostrar(s);
+        }
+        else if (o == 3) foreach (var t in db.Tecnicos) Console.WriteLine($"{t.Nombre}: {(!t.Disponible ? "No disponible" : t.TrabajosActivos >= Datos.LimiteTrabajos ? "Carga completa" : "Disponible")}");
         else if (o == 4)
         {
             var lista = Algoritmos.SeleccionFinalizados(db.Tecnicos);
@@ -410,10 +437,27 @@ class Program
         }
         else if (o == 11) for (int i = 0; i < db.Calificaciones.Length; i++) Console.WriteLine($"{i + 1} estrellas: {db.Calificaciones[i]}");
         else if (o == 12) MostrarMatriz();
+        else if (o == 13)
+        {
+            int encontrados = 0;
+            foreach (var cliente in db.Clientes)
+            {
+                int activas = 0;
+                foreach (var solicitud in db.Solicitudes)
+                    if (solicitud.ClienteCodigo == cliente.Codigo && db.Activa(solicitud)) activas++;
+                if (activas > 0)
+                {
+                    Console.WriteLine($"{cliente.Codigo} | {cliente.Nombre} | Solicitudes activas: {activas}");
+                    encontrados++;
+                }
+            }
+            if (encontrados == 0) Console.WriteLine("No hay clientes con solicitudes activas.");
+        }
     }
     static void MostrarMatriz()
     {
         int[,] matriz = db.MatrizSemanal();
+        Console.WriteLine($"Semana del {DateTime.Today.AddDays(-((int)DateTime.Today.DayOfWeek + 6) % 7):dd/MM/yyyy}");
         Console.WriteLine("Tecnico | Lun Mar Mie Jue Vie Sab Dom");
         int max = 0, tecnicoMax = -1, diaMax = -1;
         for (int i = 0; i < db.Tecnicos.Count; i++)
@@ -446,7 +490,14 @@ class Program
             db.Tecnicos.Add(new Tecnico { Codigo = t, Nombre = "Tecnico prueba " + t, Especialidad = especialidad });
             int e = Siguiente(db.Equipos, x => x.Codigo);
             Equipo equipo = especialidad switch { "Portatil" => new Portatil(), "Escritorio" => new Escritorio(), _ => new Impresora() };
-            equipo.Codigo = e; equipo.ClienteCodigo = c; equipo.Serie = "TEST-" + e;
+            string serie = "TEST-" + e;
+            int numero = 1;
+            while (db.Equipos.Exists(x => x.Serie.Equals(serie, StringComparison.OrdinalIgnoreCase)))
+            {
+                serie = "TEST-" + e + "-" + numero;
+                numero++;
+            }
+            equipo.Codigo = e; equipo.ClienteCodigo = c; equipo.Serie = serie;
             equipo.Marca = "Marca prueba"; equipo.Modelo = "Modelo prueba"; equipo.EstadoFisico = "Usado"; equipo.Accesorios = "Ninguno";
             db.Equipos.Add(equipo);
             int r = Siguiente(db.Repuestos, x => x.Codigo);

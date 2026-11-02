@@ -21,11 +21,15 @@ public class Datos
     public int[,] MatrizSemanal()
     {
         int[,] matriz = new int[Tecnicos.Count, 7];
+        DateTime hoy = DateTime.Today;
+        DateTime lunes = hoy.AddDays(-((int)hoy.DayOfWeek + 6) % 7);
+        DateTime domingo = lunes.AddDays(7);
         for (int i = 0; i < Tecnicos.Count; i++)
             foreach (var s in Solicitudes)
-                if (s.TecnicoCodigo == Tecnicos[i].Codigo)
+                if (s.TecnicoCodigo == Tecnicos[i].Codigo && s.FechaAsignacion.HasValue &&
+                    s.FechaAsignacion.Value >= lunes && s.FechaAsignacion.Value < domingo)
                 {
-                    int dia = ((int)(s.FechaAsignacion ?? s.Fecha).DayOfWeek + 6) % 7;
+                    int dia = ((int)s.FechaAsignacion.Value.DayOfWeek + 6) % 7;
                     matriz[i, dia]++;
                 }
         return matriz;

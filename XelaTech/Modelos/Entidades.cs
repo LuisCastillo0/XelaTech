@@ -15,6 +15,7 @@ public class Tecnico
     public int Codigo { get; set; }
     public string Nombre { get; set; } = "";
     public string Especialidad { get; set; } = "";
+    public bool Disponible { get; set; } = true;
     public int TrabajosActivos { get; set; }
     public int Finalizados { get; set; }
     public int SumaCalificaciones { get; set; }
