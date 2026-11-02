@@ -462,7 +462,7 @@ class Program
     }
     static void MenuReportes()
     {
-        int o = Opcion("REPORTES", "Colas por prioridad", "Solicitudes por estado", "Tecnicos disponibles/llenos", "Tecnico con mas finalizados", "Equipos por tipo", "Solicitudes por costo", "Solicitudes por fecha", "Repuestos por existencia", "Repuestos bajos", "Ingresos por entregados", "Calificaciones", "Matriz semanal", "Clientes con solicitudes activas", "Solicitudes por tecnico");
+        int o = Opcion("REPORTES", "Colas por prioridad", "Solicitudes por estado", "Tecnicos disponibles/llenos", "Tecnico con mas finalizados", "Equipos por tipo", "Solicitudes por costo", "Solicitudes por fecha", "Repuestos por existencia", "Repuestos bajos", "Ingresos por entregados", "Calificaciones", "Matriz semanal", "Clientes con solicitudes activas", "Solicitudes por tecnico", "Resumen general");
         if (o == 0) return;
         if (o == 1)
         {
@@ -545,6 +545,32 @@ class Program
             Console.WriteLine($"Activas: {activas} | Entregadas: {entregadas} | Canceladas: {canceladas}");
             if (activas + entregadas + canceladas == 0)
                 Console.WriteLine("El tecnico aun no tiene solicitudes asignadas.");
+        }
+        else if (o == 15)
+        {
+            int activas = 0, entregadas = 0, canceladas = 0;
+            int urgentes = 0, normales = 0, repuestosBajos = 0;
+            decimal ingresos = 0;
+            foreach (var solicitud in db.Solicitudes)
+            {
+                if (db.Activa(solicitud)) activas++;
+                else if (solicitud.Estado == "Entregada")
+                {
+                    entregadas++;
+                    ingresos += solicitud.Total;
+                }
+                else if (solicitud.Estado == "Cancelada") canceladas++;
+            }
+            foreach (var codigo in db.Urgentes) urgentes++;
+            foreach (var codigo in db.Normales) normales++;
+            foreach (var repuesto in db.Repuestos)
+                if (repuesto.Existencia <= repuesto.Minima) repuestosBajos++;
+            Console.WriteLine("RESUMEN GENERAL");
+            Console.WriteLine($"Clientes: {db.Clientes.Count} | Tecnicos: {db.Tecnicos.Count} | Equipos: {db.Equipos.Count}");
+            Console.WriteLine($"Solicitudes activas: {activas} | Entregadas: {entregadas} | Canceladas: {canceladas}");
+            Console.WriteLine($"En espera urgentes: {urgentes} | Normales: {normales}");
+            Console.WriteLine($"Repuestos bajo minimo: {repuestosBajos}");
+            Console.WriteLine($"Ingresos por entregas: Q{ingresos:F2}");
         }
     }
     static void MostrarMatriz()
