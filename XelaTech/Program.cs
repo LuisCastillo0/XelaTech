@@ -259,6 +259,7 @@ class Program
             {
                 var s = PedirSolicitud(); if (s == null) continue;
                 if (s.Estado != "En diagnostico") { Console.WriteLine("Debe estar en diagnostico."); continue; }
+                if (s.RepuestosUsados.Count > 0) { Console.WriteLine("No puede modificar el diagnostico despues de usar repuestos."); continue; }
                 s.Diagnostico = Texto("Diagnostico: "); s.TiempoEstimado = Entero("Horas estimadas: ", 1);
                 s.ManoObra = Dinero("Costo mano de obra: ");
                 Console.WriteLine("Diagnostico guardado.");
@@ -271,8 +272,13 @@ class Program
                 if (r == null) { Console.WriteLine("No existe."); continue; }
                 int cantidad = Entero("Cantidad: ", 1);
                 if (cantidad > r.Existencia) { Console.WriteLine("Existencia insuficiente."); continue; }
-                r.Existencia -= cantidad; r.Utilizados += cantidad;
-                s.CostoRepuestos += cantidad * r.PrecioVenta;
+                if (cantidad > int.MaxValue - r.Utilizados) { Console.WriteLine("Cantidad fuera del limite permitido."); continue; }
+                decimal costo;
+                try { costo = checked(cantidad * r.PrecioVenta + s.CostoRepuestos); }
+                catch (OverflowException) { Console.WriteLine("El costo supera el limite permitido."); continue; }
+                r.Existencia -= cantidad;
+                r.Utilizados += cantidad;
+                s.CostoRepuestos = costo;
                 s.RepuestosUsados.Add($"{r.Nombre} x{cantidad}"); Alerta(r);
             }
             else if (o == 5)
@@ -289,12 +295,25 @@ class Program
             else if (o == 7)
             {
                 var s = PedirSolicitud(); if (s == null) continue;
-                if (!db.Activa(s) || s.Historial.Count == 0 || s.Estado == "Asignada" || s.Estado == "En espera")
+                if (!db.Activa(s) || s.Historial.Count == 0 || s.Estado == "En espera")
                 { Console.WriteLine("No se puede deshacer en este estado."); continue; }
                 string anterior = s.Historial.Peek();
                 if (s.RepuestosUsados.Count > 0 && (anterior == "En diagnostico" || anterior == "En reparacion"))
-                { Console.WriteLine("No se puede regresar al diagnostico despues de consumir repuestos."); continue; }
-                s.Estado = s.Historial.Pop(); Console.WriteLine("Restaurado a: " + s.Estado);
+                { Console.WriteLine("No se puede retroceder despues de consumir repuestos."); continue; }
+                if (s.Estado == "Asignada" && anterior == "En espera")
+                {
+                    if (s.TecnicoCodigo.HasValue)
+                    {
+                        var tecnico = db.Tecnico(s.TecnicoCodigo.Value);
+                        if (tecnico != null && tecnico.TrabajosActivos > 0) tecnico.TrabajosActivos--;
+                    }
+                    s.TecnicoCodigo = null;
+                    s.FechaAsignacion = null;
+                    if (s.Urgente) db.Urgentes.Enqueue(s.Codigo);
+                    else db.Normales.Enqueue(s.Codigo);
+                }
+                s.Estado = s.Historial.Pop();
+                Console.WriteLine("Restaurado a: " + s.Estado);
             }
             else if (o == 8)
             {
@@ -357,6 +376,8 @@ class Program
 
         Queue<int>? cola = db.Urgentes.Count > 0 ? db.Urgentes : db.Normales.Count > 0 ? db.Normales : null;
         if (cola == null) { Console.WriteLine("No hay solicitudes pendientes."); return; }
+        while (cola.Count > 0 && db.Solicitud(cola.Peek())?.Estado != "En espera") cola.Dequeue();
+        if (cola.Count == 0) { Console.WriteLine("No hay solicitudes validas en esta cola."); return; }
         var s = db.Solicitud(cola.Peek())!;
         var equipo = db.Equipo(s.EquipoCodigo)!;
         Console.WriteLine($"Siguiente: {s.Codigo}, {equipo.Tipo}, {(s.Urgente ? "URGENTE" : "NORMAL")}");
@@ -402,7 +423,11 @@ class Program
         {
             if (s.Estado != "En espera" && s.Estado != "Asignada" && s.Estado != "En diagnostico")
             { Console.WriteLine("No puede cancelar en este punto."); return; }
-            if (s.TecnicoCodigo != null) db.Tecnico(s.TecnicoCodigo.Value)!.TrabajosActivos--;
+            if (s.TecnicoCodigo != null)
+            {
+                var tecnico = db.Tecnico(s.TecnicoCodigo.Value);
+                if (tecnico != null && tecnico.TrabajosActivos > 0) tecnico.TrabajosActivos--;
+            }
 
             QuitarDeCola(db.Urgentes, s.Codigo); QuitarDeCola(db.Normales, s.Codigo);
             Actualizar(s, "Cancelada");
@@ -413,7 +438,8 @@ class Program
             if (siguiente == "Entregada" && s.TecnicoCodigo != null)
             {
                 var t = db.Tecnico(s.TecnicoCodigo.Value)!;
-                t.TrabajosActivos--; t.Finalizados++;
+                if (t.TrabajosActivos > 0) t.TrabajosActivos--;
+                t.Finalizados++;
             }
         }
         else Console.WriteLine("Cambio no permitido.");
