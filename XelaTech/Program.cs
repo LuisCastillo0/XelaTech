@@ -221,7 +221,7 @@ class Program
                 if (!db.Activa(s) || s.Historial.Count == 0 || s.Estado == "Asignada" || s.Estado == "En espera")
                 { Console.WriteLine("No se puede deshacer en este estado."); continue; }
                 string anterior = s.Historial.Peek();
-                if (s.Estado == "En reparacion" && anterior == "En diagnostico" && s.RepuestosUsados.Count > 0)
+                if (s.RepuestosUsados.Count > 0 && (anterior == "En diagnostico" || anterior == "En reparacion"))
                 { Console.WriteLine("No se puede regresar al diagnostico despues de consumir repuestos."); continue; }
                 s.Estado = s.Historial.Pop(); Console.WriteLine("Restaurado a: " + s.Estado);
             }
@@ -337,10 +337,10 @@ class Program
     {
         int o = Opcion("ORDENAMIENTOS", "Solicitudes por costo (Burbuja ascendente)", "Tecnicos por finalizados (Seleccion descendente)", "Repuestos por existencia (Shell ascendente)", "Solicitudes por fecha (Quick ascendente)");
         if (o == 0) return;
-        if (o == 1 && db.Solicitudes.Count >= 2) foreach (var s in Algoritmos.BurbujaCosto(db.Solicitudes)) Mostrar(s);
-        else if (o == 2 && db.Tecnicos.Count >= 2) foreach (var t in Algoritmos.SeleccionFinalizados(db.Tecnicos)) Console.WriteLine($"{t.Nombre}: {t.Finalizados}");
-        else if (o == 3 && db.Repuestos.Count >= 2) foreach (var r in Algoritmos.ShellExistencia(db.Repuestos)) Console.WriteLine($"{r.Nombre}: {r.Existencia}");
-        else if (o == 4 && db.Solicitudes.Count >= 2) foreach (var s in Algoritmos.RapidoFecha(db.Solicitudes)) Mostrar(s);
+        if (o == 1 && db.Solicitudes.Count >= 2) { Console.WriteLine("Burbuja | Costo total | Ascendente"); foreach (var s in Algoritmos.BurbujaCosto(db.Solicitudes)) Mostrar(s); }
+        else if (o == 2 && db.Tecnicos.Count >= 2) { Console.WriteLine("Seleccion | Servicios finalizados | Descendente"); foreach (var t in Algoritmos.SeleccionFinalizados(db.Tecnicos)) Console.WriteLine($"{t.Nombre}: {t.Finalizados}"); }
+        else if (o == 3 && db.Repuestos.Count >= 2) { Console.WriteLine("Shell | Existencia | Ascendente"); foreach (var r in Algoritmos.ShellExistencia(db.Repuestos)) Console.WriteLine($"{r.Nombre}: {r.Existencia}"); }
+        else if (o == 4 && db.Solicitudes.Count >= 2) { Console.WriteLine("Quick Sort | Fecha de recepcion | Ascendente"); foreach (var s in Algoritmos.RapidoFecha(db.Solicitudes)) Mostrar(s); }
         else Console.WriteLine("Se requieren al menos dos registros.");
     }
     static void MenuBuscar()
@@ -393,11 +393,13 @@ class Program
         else if (o == 6 || o == 7)
         {
             if (db.Solicitudes.Count < 2) { Console.WriteLine("Faltan datos."); return; }
+            Console.WriteLine(o == 6 ? "Burbuja | Costo total | Ascendente" : "Quick Sort | Fecha de recepcion | Ascendente");
             foreach (var s in o == 6 ? Algoritmos.BurbujaCosto(db.Solicitudes) : Algoritmos.RapidoFecha(db.Solicitudes)) Mostrar(s);
         }
         else if (o == 8)
         {
             if (db.Repuestos.Count < 2) { Console.WriteLine("Faltan datos."); return; }
+            Console.WriteLine("Shell | Existencia | Ascendente");
             foreach (var r in Algoritmos.ShellExistencia(db.Repuestos)) Console.WriteLine($"{r.Nombre}: {r.Existencia}");
         }
         else if (o == 9) foreach (var r in db.Repuestos) if (r.Existencia <= r.Minima) Console.WriteLine($"{r.Nombre}: {r.Existencia} unidades");
@@ -444,7 +446,7 @@ class Program
             db.Tecnicos.Add(new Tecnico { Codigo = t, Nombre = "Tecnico prueba " + t, Especialidad = especialidad });
             int e = Siguiente(db.Equipos, x => x.Codigo);
             Equipo equipo = especialidad switch { "Portatil" => new Portatil(), "Escritorio" => new Escritorio(), _ => new Impresora() };
-            equipo.Codigo = e; equipo.ClienteCodigo = c; equipo.Serie = "TEST-" + Guid.NewGuid().ToString("N")[..8];
+            equipo.Codigo = e; equipo.ClienteCodigo = c; equipo.Serie = "TEST-" + e;
             equipo.Marca = "Marca prueba"; equipo.Modelo = "Modelo prueba"; equipo.EstadoFisico = "Usado"; equipo.Accesorios = "Ninguno";
             db.Equipos.Add(equipo);
             int r = Siguiente(db.Repuestos, x => x.Codigo);
